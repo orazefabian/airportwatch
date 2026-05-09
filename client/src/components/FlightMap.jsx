@@ -135,7 +135,7 @@ export default function FlightMap({ states, center, isLoading, icao, selectedFli
   const originCoords = showOrigin ? { lat: depAirport.lat, lon: depAirport.lon } : null;
 
   return (
-    <div className="relative rounded-xl overflow-hidden border border-slate-700" style={{ height: 480 }}>
+    <div className="relative rounded-xl overflow-hidden border border-slate-700 h-64 sm:h-[480px]">
       {isLoading && (
         <div className="absolute inset-0 z-[1000] flex items-center justify-center bg-slate-900/70">
           <span className="text-cyan-400 text-sm animate-pulse">Loading live traffic…</span>
@@ -222,7 +222,7 @@ export default function FlightMap({ states, center, isLoading, icao, selectedFli
       </MapContainer>
 
       {/* Legend */}
-      <div className="absolute bottom-3 left-3 z-[1000] flex gap-3 text-xs bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-700">
+      <div className="absolute bottom-3 left-3 z-[1000] flex flex-wrap gap-x-3 gap-y-1 text-xs bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-700 max-w-[calc(100%-1.5rem)]">
         <span><span style={{ color: "#22d3ee" }}>✈</span> Arrivals ({arrivals.length})</span>
         <span><span style={{ color: "#a78bfa" }}>✈</span> Departures ({departures.length})</span>
         {selectedFlight && isTracked && (

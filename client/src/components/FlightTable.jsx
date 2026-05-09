@@ -16,7 +16,6 @@ const STATUS_STYLES = {
   Unknown:    "bg-slate-800/60 text-slate-500 border-slate-700",
 };
 
-// Chip styles mirror the pill colours but are slightly more saturated for the active state
 const CHIP_ACTIVE = {
   Expected:   "bg-slate-700 text-slate-200 border-slate-500",
   Scheduled:  "bg-slate-700 text-slate-200 border-slate-500",
@@ -53,7 +52,7 @@ function dateLabel(timeObj) {
   const match = raw.match(/(\d{4}-\d{2}-\d{2})/);
   if (!match) return null;
   const flightDate = match[1];
-  const fmt = (d) => d.toLocaleDateString("en-CA"); // YYYY-MM-DD
+  const fmt = (d) => d.toLocaleDateString("en-CA");
   const today     = fmt(new Date());
   const tomorrow  = fmt(new Date(Date.now() + 86_400_000));
   const yesterday = fmt(new Date(Date.now() - 86_400_000));
@@ -76,6 +75,93 @@ function DelayBadge({ scheduled, revised }) {
     <span className={`ml-1.5 text-xs font-medium ${mins > 0 ? "text-amber-400" : "text-green-400"}`}>
       {mins > 0 ? `+${mins}m` : `${mins}m`}
     </span>
+  );
+}
+
+function PaginationControls({ page, pageCount, setPage }) {
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <button
+        onClick={() => setPage((p) => Math.max(0, p - 1))}
+        disabled={page === 0}
+        className="px-2 py-1 rounded border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+      >
+        ‹ Prev
+      </button>
+      <span className="text-slate-500">{page + 1} / {pageCount}</span>
+      <button
+        onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+        disabled={page === pageCount - 1}
+        className="px-2 py-1 rounded border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+      >
+        Next ›
+      </button>
+    </div>
+  );
+}
+
+// Mobile card — replaces the table row on small screens
+function FlightCard({ flight, isArrival, selected, onSelect }) {
+  const dep = flight.departure;
+  const arr = flight.arrival;
+  const timeEvent   = isArrival ? arr : dep;
+  const scheduled   = timeEvent?.scheduledTime;
+  const revised     = timeEvent?.revisedTime ?? timeEvent?.actualTime;
+  const displayTime = localTime(revised) || localTime(scheduled);
+  const displayDate = dateLabel(revised)  || dateLabel(scheduled);
+  const statusStyle = STATUS_STYLES[flight.status] || STATUS_STYLES.Unknown;
+  const counterpart = isArrival ? dep?.airport : arr?.airport;
+  const extra = isArrival
+    ? (arr?.baggageBelt ? `Belt ${arr.baggageBelt}` : null)
+    : (dep?.gate        ? `Gate ${dep.gate}`        : null);
+
+  return (
+    <div
+      onClick={() => onSelect(flight)}
+      className={`rounded-lg border px-4 py-3 cursor-pointer transition-colors ${
+        selected
+          ? "bg-cyan-950/50 border-cyan-600"
+          : "bg-slate-900 border-slate-700 active:bg-slate-800"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            {selected && <span className="text-cyan-400 text-xs flex-shrink-0">▶</span>}
+            <span className="font-mono font-bold text-slate-100">{flight.number || "—"}</span>
+          </div>
+          {flight.airline?.name && (
+            <div className="text-xs text-slate-500 truncate">{flight.airline.name}</div>
+          )}
+        </div>
+        <span className={`px-2 py-0.5 rounded-full text-xs border font-medium flex-shrink-0 ${statusStyle}`}>
+          {flight.status || "Unknown"}
+        </span>
+      </div>
+      <div className="mt-2 flex items-end justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-xs text-slate-500 mb-0.5">{isArrival ? "From" : "To"}</div>
+          <span className="font-mono text-cyan-400 font-semibold">
+            {counterpart?.iata || counterpart?.icao || "—"}
+          </span>
+          {counterpart?.municipalityName && (
+            <span className="text-xs text-slate-500 ml-1">{counterpart.municipalityName}</span>
+          )}
+        </div>
+        <div className="text-right flex-shrink-0">
+          <div className="font-mono text-slate-200 text-sm">
+            {displayTime || "—"}
+            <DelayBadge scheduled={scheduled} revised={revised} />
+          </div>
+          {displayDate && <div className="text-xs text-slate-500">{displayDate}</div>}
+        </div>
+      </div>
+      {extra && (
+        <div className="mt-1.5 text-xs">
+          <span className="font-mono font-bold text-violet-400">{extra}</span>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -200,17 +286,9 @@ export default function FlightTable({ flights, isLoading, type, selectedFlight, 
   const [statusFilter, setStatusFilter] = useState(null);
   const [page, setPage] = useState(0);
 
-  // Reset page (but keep filter) when switching tabs
-  useEffect(() => {
-    setPage(0);
-  }, [type]);
+  useEffect(() => { setPage(0); }, [type]);
+  useEffect(() => { setPage(0); }, [statusFilter]);
 
-  // Reset to page 0 when filter changes
-  useEffect(() => {
-    setPage(0);
-  }, [statusFilter]);
-
-  // Statuses present in the current list, preserving a sensible display order
   const STATUS_ORDER = ["Expected", "Scheduled", "EnRoute", "Landing", "Delayed", "GateClosed", "Arrived", "Departed", "Cancelled", "Unknown"];
   const presentStatuses = useMemo(() => {
     const counts = {};
@@ -260,7 +338,47 @@ export default function FlightTable({ flights, isLoading, type, selectedFlight, 
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-slate-700">
+      {/* Mobile: card list */}
+      <div className="sm:hidden space-y-2">
+        {isLoading ? (
+          Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 animate-pulse">
+              <div className="flex justify-between mb-2">
+                <div className="h-4 bg-slate-700 rounded w-20" />
+                <div className="h-5 bg-slate-700 rounded-full w-16" />
+              </div>
+              <div className="flex justify-between">
+                <div className="h-3 bg-slate-700 rounded w-24" />
+                <div className="h-3 bg-slate-700 rounded w-14" />
+              </div>
+            </div>
+          ))
+        ) : paginated.length === 0 ? (
+          <div className="rounded-lg border border-slate-700 px-4 py-12 text-center text-slate-500 text-sm">
+            {statusFilter
+              ? `No ${type} with status "${statusFilter}"`
+              : `No ${type} in the current window`}
+          </div>
+        ) : (
+          paginated.map((flight, i) => (
+            <FlightCard
+              key={flight.number ?? i}
+              flight={flight}
+              isArrival={isArrival}
+              selected={isSelected(flight, selectedFlight)}
+              onSelect={onFlightSelect}
+            />
+          ))
+        )}
+        {!isLoading && filtered.length > 0 && pageCount > 1 && (
+          <div className="flex justify-center pt-1">
+            <PaginationControls page={page} pageCount={pageCount} setPage={setPage} />
+          </div>
+        )}
+      </div>
+
+      {/* Desktop: table */}
+      <div className="hidden sm:block overflow-x-auto rounded-lg border border-slate-700">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-800/80 text-slate-400 uppercase text-xs tracking-wider">
@@ -277,7 +395,9 @@ export default function FlightTable({ flights, isLoading, type, selectedFlight, 
             ) : paginated.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-12 text-center text-slate-500">
-                  {statusFilter ? `No ${type} with status "${statusFilter}"` : `No ${type} in the current window`}
+                  {statusFilter
+                    ? `No ${type} with status "${statusFilter}"`
+                    : `No ${type} in the current window`}
                 </td>
               </tr>
             ) : (
@@ -302,32 +422,13 @@ export default function FlightTable({ flights, isLoading, type, selectedFlight, 
           </tbody>
         </table>
 
-        {/* Footer: hint + pagination */}
         {filtered.length > 0 && (
           <div className="px-4 py-2 flex items-center justify-between border-t border-slate-800">
             <span className="text-xs text-slate-600">
               Click a row to track on map · click again to deselect
             </span>
             {pageCount > 1 && (
-              <div className="flex items-center gap-2 text-xs">
-                <button
-                  onClick={() => setPage((p) => Math.max(0, p - 1))}
-                  disabled={page === 0}
-                  className="px-2 py-1 rounded border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  ‹ Prev
-                </button>
-                <span className="text-slate-500">
-                  {page + 1} / {pageCount}
-                </span>
-                <button
-                  onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
-                  disabled={page === pageCount - 1}
-                  className="px-2 py-1 rounded border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  Next ›
-                </button>
-              </div>
+              <PaginationControls page={page} pageCount={pageCount} setPage={setPage} />
             )}
           </div>
         )}

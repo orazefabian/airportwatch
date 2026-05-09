@@ -129,7 +129,7 @@ export default function Dashboard() {
                 <h1 className="text-2xl font-bold text-slate-100">{airport.name}</h1>
                 <p className="text-slate-400 mt-1">{airport.city}, {airport.country}</p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2">
                 <Badge label="ICAO" value={airport.icao} />
                 <Badge label="IATA" value={airport.iata} />
                 <StatBadge label="Arrivals"   value={flightsLoading ? "…" : arrivals.length}   color="cyan"   />
@@ -148,7 +148,7 @@ export default function Dashboard() {
 
         {/* Arrivals / Departures */}
         <section>
-          <div className="flex items-end justify-between mb-4 border-b border-slate-700">
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between mb-4 border-b border-slate-700">
             <div className="flex gap-1">
               {["arrivals", "departures"].map((tab) => (
                 <button
@@ -170,13 +170,13 @@ export default function Dashboard() {
               ))}
             </div>
 
-            <div className="flex items-center gap-1.5 pb-2">
-              <span className="text-xs text-slate-500 mr-1">Window</span>
+            <div className="flex items-center gap-1.5 py-2 sm:pb-2 overflow-x-auto">
+              <span className="text-xs text-slate-500 mr-1 flex-shrink-0">Window</span>
               {[2, 4, 8, 12, 24].map((h) => (
                 <button
                   key={h}
                   onClick={() => { setWindowHours(h); setSelectedFlight(null); }}
-                  className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
+                  className={`flex-shrink-0 px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
                     windowHours === h
                       ? "bg-cyan-900/60 text-cyan-300 border-cyan-700"
                       : "bg-slate-800/60 text-slate-400 border-slate-700 hover:text-slate-200 hover:border-slate-500"

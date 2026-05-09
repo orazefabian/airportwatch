@@ -6,19 +6,18 @@ export default function Navbar({ showTimer = false, refetchInterval = 60 }) {
 
   return (
     <nav className="bg-slate-900 border-b border-slate-700 px-4 py-3 flex items-center justify-between sticky top-0 z-50">
-      <Link to="/" className="flex items-center gap-3 group">
+      <Link to="/" className="flex items-center gap-2 sm:gap-3 group">
         <RadarIcon />
-        <span className="text-xl font-bold tracking-widest text-cyan-400 group-hover:text-cyan-300 transition-colors">
-          RUNWAY<span className="text-slate-200">SCOPE</span>
+        <span className="text-base sm:text-xl font-bold tracking-wider sm:tracking-widest text-cyan-400 group-hover:text-cyan-300 transition-colors">
+          AIRPORT<span className="text-slate-200">WATCH</span>
         </span>
       </Link>
 
       {showTimer && (
         <div className="flex items-center gap-2 text-sm text-slate-400">
-          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-          <span>
-            Refreshing in <span className="text-cyan-400 font-mono font-bold">{remaining}s</span>
-          </span>
+          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0" />
+          <span className="hidden sm:inline">Refreshing in </span>
+          <span className="text-cyan-400 font-mono font-bold">{remaining}s</span>
         </div>
       )}
     </nav>
