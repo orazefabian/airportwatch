@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -134,6 +134,27 @@ export default function FlightMap({ states, center, isLoading, icao, selectedFli
 
   const originCoords = showOrigin ? { lat: depAirport.lat, lon: depAirport.lon } : null;
 
+  // Animated route line — only when the plane has a live position
+  const trackedState = isTracked
+    ? (states || []).find((s) => matchesSelected(s, selectedFlight))
+    : null;
+  const planePos = trackedState
+    ? [trackedState.latitude, trackedState.longitude]
+    : null;
+  const routeColor = trackedState?.flightType === "departure" ? "#a78bfa" : "#22d3ee";
+
+  // For arrivals: dep = origin airport (enriched), arr = watched airport (center)
+  // For departures: dep = watched airport (center), arr = destination airport (enriched)
+  const isArrivalFlight = trackedState?.flightType !== "departure";
+  const depApt = selectedFlight?.departure?.airport;
+  const arrApt = selectedFlight?.arrival?.airport;
+  const routeDepPos = isArrivalFlight
+    ? (depApt?.lat != null ? [depApt.lat, depApt.lon] : null)
+    : center;
+  const routeArrPos = isArrivalFlight
+    ? center
+    : (arrApt?.lat != null ? [arrApt.lat, arrApt.lon] : null);
+
   return (
     <div className="relative rounded-xl overflow-hidden border border-slate-700 h-64 sm:h-[480px]">
       {isLoading && (
@@ -189,6 +210,41 @@ export default function FlightMap({ states, center, isLoading, icao, selectedFli
               </div>
             </Popup>
           </Marker>
+        )}
+
+        {/* Animated route — dep → plane → dest, shown when plane is tracked */}
+        {planePos && (
+          <>
+            {/* Faint guide line for the full route */}
+            {routeDepPos && routeArrPos && (
+              <Polyline
+                positions={[routeDepPos, planePos, routeArrPos]}
+                pathOptions={{ color: routeColor, weight: 1.5, opacity: 0.12 }}
+              />
+            )}
+            {/* Dep → plane: dimmer (already flown) */}
+            {routeDepPos && (
+              <Polyline
+                positions={[routeDepPos, planePos]}
+                pathOptions={{
+                  color: routeColor, weight: 3, opacity: 0.4,
+                  dashArray: "4 14", lineCap: "round",
+                  className: "route-flow-line",
+                }}
+              />
+            )}
+            {/* Plane → dest: brighter (upcoming path) */}
+            {routeArrPos && (
+              <Polyline
+                positions={[planePos, routeArrPos]}
+                pathOptions={{
+                  color: routeColor, weight: 3, opacity: 0.85,
+                  dashArray: "4 14", lineCap: "round",
+                  className: "route-flow-line",
+                }}
+              />
+            )}
+          </>
         )}
 
         {/* Live aircraft — scheduled flights only */}
