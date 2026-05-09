@@ -1,4 +1,4 @@
-# RunwayScope
+# AirportWatch
 
 Real-time airport flight tracker showing arrivals, departures, and live airborne traffic for any major airport worldwide, powered by the [OpenSky Network API](https://opensky-network.org/).
 
@@ -40,7 +40,7 @@ Real-time airport flight tracker showing arrivals, departures, and live airborne
 1. **Clone or enter the project directory**
 
    ```bash
-   cd runwayscope
+   cd airportwatch
    ```
 
 2. **Copy environment variables**
@@ -98,7 +98,7 @@ Then open http://localhost:5173 in your browser.
 ## Project Structure
 
 ```
-runwayscope/
+airportwatch/
 ├── client/                  # React + Vite frontend
 │   ├── src/
 │   │   ├── api/             # Axios API client functions

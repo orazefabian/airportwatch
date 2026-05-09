@@ -1,11 +1,10 @@
-import { useState, Suspense, lazy } from "react";
+import { useState, useRef, useMemo, Suspense, lazy } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import Navbar from "../components/Navbar";
 import FlightTable from "../components/FlightTable";
-import { fetchAirports, fetchFlights, fetchLiveTraffic } from "../api/airports";
+import { fetchAirports, fetchSchedule, fetchTrack } from "../api/airports";
 
-// Lazy-load the map so Leaflet doesn't block initial render
 const FlightMap = lazy(() => import("../components/FlightMap"));
 
 const REFETCH_MS = 60 * 1000;
@@ -13,6 +12,9 @@ const REFETCH_MS = 60 * 1000;
 export default function Dashboard() {
   const { icao } = useParams();
   const [activeTab, setActiveTab] = useState("arrivals");
+  const [selectedFlight, setSelectedFlight] = useState(null);
+  const [windowHours, setWindowHours] = useState(4);
+  const mapRef = useRef(null);
 
   const { data: airports = [] } = useQuery({
     queryKey: ["airports"],
@@ -28,27 +30,83 @@ export default function Dashboard() {
     error: flightsError,
     refetch: refetchFlights,
   } = useQuery({
-    queryKey: ["flights", icao],
-    queryFn: () => fetchFlights(icao),
-    refetchInterval: REFETCH_MS,
+    queryKey: ["schedule", icao, windowHours],
+    queryFn: () => fetchSchedule(icao, windowHours),
+    staleTime: 15 * 60 * 1000,
+    refetchInterval: 15 * 60 * 1000,
     retry: 1,
   });
+
+  const arrivals   = flightData?.arrivals   || [];
+  const departures = flightData?.departures || [];
+  const mapCenter  = airport ? [airport.lat, airport.lon] : [46.6425, 14.3376];
+
+  // Build a map from modeS (ICAO24 transponder) → { flightType, flight }
+  // This is what lets us locate any scheduled aircraft anywhere in the world.
+  const icao24Map = useMemo(() => {
+    const map = {};
+    arrivals.forEach((f) => {
+      const code = f.aircraft?.modeS?.toLowerCase();
+      if (code) map[code] = { flightType: "arrival", flight: f };
+    });
+    departures.forEach((f) => {
+      const code = f.aircraft?.modeS?.toLowerCase();
+      if (code) map[code] = { flightType: "departure", flight: f };
+    });
+    return map;
+  }, [arrivals, departures]);
+
+  const icao24Codes = useMemo(() => Object.keys(icao24Map), [icao24Map]);
 
   const {
-    data: liveStates,
-    isLoading: liveLoading,
-    error: liveError,
-    refetch: refetchLive,
+    data: trackedStates,
+    isLoading: trackLoading,
+    error: trackError,
+    refetch: refetchTrack,
   } = useQuery({
-    queryKey: ["live", icao],
-    queryFn: () => fetchLiveTraffic(icao),
+    queryKey: ["track", icao24Codes.join(",")],
+    queryFn: () => fetchTrack(icao24Codes),
+    staleTime: REFETCH_MS,
+    enabled: icao24Codes.length > 0,
     refetchInterval: REFETCH_MS,
     retry: 1,
   });
 
-  const arrivals = flightData?.arrivals || [];
-  const departures = flightData?.departures || [];
-  const mapCenter = airport ? [airport.lat, airport.lon] : [46.6425, 14.3376];
+  // Annotate each tracked state with its flight type for colour-coding on the map
+  const relevantStates = useMemo(() => {
+    if (!trackedStates) return [];
+    return trackedStates
+      .filter((s) => s.latitude != null && s.longitude != null)
+      .map((s) => {
+        const info = icao24Map[s.icao24?.toLowerCase()];
+        return info ? { ...s, flightType: info.flightType } : null;
+      })
+      .filter(Boolean);
+  }, [trackedStates, icao24Map]);
+
+  function handleFlightSelect(flight) {
+    if (selectedFlight?.number === flight.number && selectedFlight?.callSign === flight.callSign) {
+      setSelectedFlight(null);
+      return;
+    }
+    setSelectedFlight(flight);
+    mapRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function handleMapPlaneClick(state) {
+    const info = icao24Map[state.icao24?.toLowerCase()];
+    if (!info) return;
+    setActiveTab(info.flightType === "arrival" ? "arrivals" : "departures");
+    const flight = info.flight;
+    if (selectedFlight?.number === flight.number && selectedFlight?.callSign === flight.callSign) {
+      setSelectedFlight(null);
+    } else {
+      setSelectedFlight(flight);
+    }
+  }
+
+  const mapLoading = trackLoading && icao24Codes.length > 0;
+  const mapError   = trackError;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -56,8 +114,7 @@ export default function Dashboard() {
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-6 space-y-6">
 
-        {/* Back / change airport */}
-        <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-cyan-400 transition-colors">
+        <Link to="/select" className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-cyan-400 transition-colors">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M9 11L5 7l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
@@ -75,8 +132,8 @@ export default function Dashboard() {
               <div className="flex items-center gap-3">
                 <Badge label="ICAO" value={airport.icao} />
                 <Badge label="IATA" value={airport.iata} />
-                <StatBadge label="Arrivals (2h)" value={flightsLoading ? "…" : arrivals.length} color="cyan" />
-                <StatBadge label="Departures (2h)" value={flightsLoading ? "…" : departures.length} color="violet" />
+                <StatBadge label="Arrivals"   value={flightsLoading ? "…" : arrivals.length}   color="cyan"   />
+                <StatBadge label="Departures" value={flightsLoading ? "…" : departures.length} color="violet" />
               </div>
             </div>
           ) : (
@@ -89,49 +146,46 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Live map */}
-        <section>
-          <h2 className="text-base font-semibold text-slate-200 mb-3 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-            Live Traffic Map
-            <span className="text-xs text-slate-500 font-normal">~150 km radius · click aircraft for details</span>
-            {liveError && (
-              <button onClick={refetchLive} className="ml-auto text-xs text-red-400 hover:text-red-300">
-                Retry
-              </button>
-            )}
-          </h2>
-
-          <Suspense fallback={<MapPlaceholder />}>
-            <FlightMap
-              states={liveStates}
-              center={mapCenter}
-              isLoading={liveLoading}
-            />
-          </Suspense>
-        </section>
-
         {/* Arrivals / Departures */}
         <section>
-          <div className="flex gap-1 mb-4 border-b border-slate-700">
-            {["arrivals", "departures"].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-5 py-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${
-                  activeTab === tab
-                    ? "border-cyan-500 text-cyan-400"
-                    : "border-transparent text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                {tab}
-                {!flightsLoading && flightData && (
-                  <span className="ml-2 text-xs bg-slate-800 px-1.5 py-0.5 rounded-full">
-                    {tab === "arrivals" ? arrivals.length : departures.length}
-                  </span>
-                )}
-              </button>
-            ))}
+          <div className="flex items-end justify-between mb-4 border-b border-slate-700">
+            <div className="flex gap-1">
+              {["arrivals", "departures"].map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => { setActiveTab(tab); setSelectedFlight(null); }}
+                  className={`px-5 py-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${
+                    activeTab === tab
+                      ? "border-cyan-500 text-cyan-400"
+                      : "border-transparent text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  {tab}
+                  {!flightsLoading && flightData && (
+                    <span className="ml-2 text-xs bg-slate-800 px-1.5 py-0.5 rounded-full">
+                      {tab === "arrivals" ? arrivals.length : departures.length}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-1.5 pb-2">
+              <span className="text-xs text-slate-500 mr-1">Window</span>
+              {[2, 4, 8, 12, 24].map((h) => (
+                <button
+                  key={h}
+                  onClick={() => { setWindowHours(h); setSelectedFlight(null); }}
+                  className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
+                    windowHours === h
+                      ? "bg-cyan-900/60 text-cyan-300 border-cyan-700"
+                      : "bg-slate-800/60 text-slate-400 border-slate-700 hover:text-slate-200 hover:border-slate-500"
+                  }`}
+                >
+                  ±{h}h
+                </button>
+              ))}
+            </div>
           </div>
 
           {flightsError ? (
@@ -141,9 +195,39 @@ export default function Dashboard() {
               flights={activeTab === "arrivals" ? arrivals : departures}
               isLoading={flightsLoading}
               type={activeTab}
+              selectedFlight={selectedFlight}
+              onFlightSelect={handleFlightSelect}
             />
           )}
         </section>
+
+        {/* Live map */}
+        <section ref={mapRef}>
+          <h2 className="text-base font-semibold text-slate-200 mb-3 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+            Live Traffic Map
+            <span className="text-xs text-slate-500 font-normal">scheduled flights only · worldwide tracking</span>
+            {selectedFlight && (
+              <span className="ml-2 text-xs text-cyan-400 font-medium">Tracking {selectedFlight.number}</span>
+            )}
+            {mapError && (
+              <button onClick={refetchTrack} className="ml-auto text-xs text-red-400 hover:text-red-300">Retry</button>
+            )}
+          </h2>
+
+          <Suspense fallback={<MapPlaceholder />}>
+            <FlightMap
+              states={relevantStates}
+              center={mapCenter}
+              isLoading={mapLoading}
+              icao={icao.toUpperCase()}
+              selectedFlight={selectedFlight}
+              onFlightSelect={handleMapPlaneClick}
+              onFlightDeselect={() => setSelectedFlight(null)}
+            />
+          </Suspense>
+        </section>
+
       </main>
     </div>
   );
@@ -160,7 +244,7 @@ function Badge({ label, value }) {
 
 function StatBadge({ label, value, color }) {
   const colors = {
-    cyan: "text-cyan-400 border-cyan-900 bg-cyan-950/40",
+    cyan:   "text-cyan-400 border-cyan-900 bg-cyan-950/40",
     violet: "text-violet-400 border-violet-900 bg-violet-950/40",
   };
   return (

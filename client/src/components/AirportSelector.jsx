@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchAirports } from "../api/airports";
 
-const STORAGE_KEY = "runwayscope_last_airport";
+const STORAGE_KEY = "airportwatch_last_airport";
 
 export default function AirportSelector() {
   const navigate = useNavigate();

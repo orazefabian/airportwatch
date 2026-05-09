@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const flightRoutes = require("./routes/flights");
+const { load: warmFileCache } = require("./fileCache");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -22,6 +23,8 @@ app.use((err, req, res, next) => {
   res.status(status).json({ error: message });
 });
 
-app.listen(PORT, () => {
-  console.log(`RunwayScope server running on http://localhost:${PORT}`);
+warmFileCache().then(() => {
+  app.listen(PORT, () => {
+    console.log(`AirportWatch server running on http://localhost:${PORT}`);
+  });
 });

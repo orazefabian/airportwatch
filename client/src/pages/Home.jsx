@@ -10,7 +10,7 @@ export default function Home() {
 
   useEffect(() => {
     // Always go straight to Klagenfurt unless the user explicitly navigated here to change
-    const last = localStorage.getItem("runwayscope_last_airport");
+    const last = localStorage.getItem("airportwatch_last_airport");
     const target = last || DEFAULT_AIRPORT;
     navigate(`/airport/${target}`, { replace: true });
   }, [navigate]);

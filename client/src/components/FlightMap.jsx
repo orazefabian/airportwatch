@@ -1,27 +1,88 @@
-import { MapContainer, TileLayer, Marker, Popup, Tooltip } from "react-leaflet";
+import { useEffect, useRef } from "react";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-const AIRPORT_ICON = L.divIcon({
-  className: "",
-  html: `<div style="font-size:22px;line-height:1;" title="LOWK">🛬</div>`,
-  iconSize: [24, 24],
-  iconAnchor: [12, 12],
-});
+function matchesSelected(state, selectedFlight) {
+  if (!selectedFlight) return false;
+  if (selectedFlight.aircraft?.modeS) {
+    return selectedFlight.aircraft.modeS.toLowerCase() === (state.icao24 || "").toLowerCase();
+  }
+  return selectedFlight.callSign?.trim().toLowerCase() === (state.callsign || "").trim().toLowerCase();
+}
 
-function planeIcon(heading, onGround) {
-  const color = onGround ? "#f59e0b" : "#22d3ee";
-  const deg = heading ?? 0;
+function localTime(timeObj) {
+  const raw = timeObj?.local || timeObj?.utc || "";
+  const m = raw.match(/\d{2}:\d{2}/);
+  return m ? m[0] : null;
+}
+
+// ✈ points east by default → subtract 90° so heading 0 = north
+function planeIcon(heading, flightType, highlighted) {
+  const color = highlighted
+    ? "#ffffff"
+    : flightType === "departure"
+    ? "#a78bfa"
+    : "#22d3ee";
+  const glow = highlighted ? "#ffffffcc" : color + "66";
+  const size = highlighted ? 26 : 20;
+  const deg  = (heading ?? 0) - 90;
+  const pad  = highlighted ? 24 : 4;
+  const total = size + pad;
+
+  const rings = highlighted
+    ? `<div style="position:absolute;inset:0;border-radius:50%;border:2px solid rgba(255,255,255,0.9);animation:sel-ping 1.4s ease-out infinite;"></div>
+       <div style="position:absolute;inset:6px;border-radius:50%;border:1px solid rgba(255,255,255,0.35);"></div>`
+    : "";
+
   return L.divIcon({
     className: "",
     html: `
-      <div style="transform:rotate(${deg}deg);width:24px;height:24px;display:flex;align-items:center;justify-content:center;">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="${color}">
-          <path d="M12 2L8 9H3l3 3-1 8 7-4 7 4-1-8 3-3h-5L12 2z"/>
-        </svg>
+      ${highlighted ? "<style>@keyframes sel-ping{0%{transform:scale(1);opacity:1}100%{transform:scale(1.9);opacity:0}}</style>" : ""}
+      <div style="position:relative;width:${total}px;height:${total}px;display:flex;align-items:center;justify-content:center;">
+        ${rings}
+        <div style="transform:rotate(${deg}deg);font-size:${size}px;line-height:1;color:${color};filter:drop-shadow(0 0 7px ${glow});position:relative;z-index:1;">✈</div>
       </div>`,
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
+    iconSize: [total, total],
+    iconAnchor: [total / 2, total / 2],
+  });
+}
+
+function airportIcon(icao) {
+  return L.divIcon({
+    className: "",
+    html: `
+      <style>
+        @keyframes rs-ring-pulse{0%,100%{transform:scale(1);opacity:.6}50%{transform:scale(1.7);opacity:0}}
+        .rs-ring{animation:rs-ring-pulse 2s ease-out infinite}
+      </style>
+      <div style="position:relative;width:48px;height:48px;">
+        <div class="rs-ring" style="position:absolute;inset:0;border-radius:50%;border:2px solid #22d3ee;transform-origin:center;"></div>
+        <div style="position:absolute;inset:6px;border-radius:50%;border:1.5px solid #22d3ee88;"></div>
+        <div style="position:absolute;inset:14px;border-radius:50%;background:#22d3ee;box-shadow:0 0 8px #22d3ee,0 0 20px #22d3ee88;"></div>
+        <div style="position:absolute;top:52px;left:50%;transform:translateX(-50%);background:#020617;color:#22d3ee;font-size:10px;font-weight:700;letter-spacing:1.5px;padding:2px 7px;border-radius:4px;border:1px solid #22d3ee;white-space:nowrap;font-family:monospace;box-shadow:0 0 8px #22d3ee44;">${icao}</div>
+      </div>`,
+    iconSize: [48, 48],
+    iconAnchor: [24, 24],
+  });
+}
+
+function originIcon(icao) {
+  return L.divIcon({
+    className: "",
+    html: `
+      <style>
+        @keyframes orig-pulse{0%,100%{transform:scale(1);opacity:.5}50%{transform:scale(1.65);opacity:0}}
+        .orig-ring{animation:orig-pulse 2.5s ease-out infinite}
+      </style>
+      <div style="position:relative;width:40px;height:40px;">
+        <div class="orig-ring" style="position:absolute;inset:0;border-radius:50%;border:1.5px solid #fbbf24;transform-origin:center;"></div>
+        <div style="position:absolute;inset:6px;border-radius:50%;border:1px solid #fbbf2455;"></div>
+        <div style="position:absolute;inset:13px;border-radius:50%;background:#fbbf24;box-shadow:0 0 6px #fbbf24,0 0 16px #fbbf2466;"></div>
+        <div style="position:absolute;top:44px;left:50%;transform:translateX(-50%);background:#020617;color:#fbbf24;font-size:10px;font-weight:700;letter-spacing:1.5px;padding:2px 7px;border-radius:4px;border:1px solid #fbbf24;white-space:nowrap;font-family:monospace;box-shadow:0 0 8px #fbbf2433;">${icao}</div>
+      </div>`,
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
   });
 }
 
@@ -30,10 +91,48 @@ function msToKnots(ms) {
   return `${Math.round(ms * 1.94384)} kts`;
 }
 
-export default function FlightMap({ states, center, isLoading }) {
-  const validStates = (states || []).filter(
-    (s) => s.latitude != null && s.longitude != null
-  );
+function MapFocusController({ states, selectedFlight, airportCenter, originCoords }) {
+  const map = useMap();
+  const hasZoomedRef = useRef(false);
+
+  useEffect(() => {
+    hasZoomedRef.current = false;
+  }, [selectedFlight]);
+
+  useEffect(() => {
+    if (!selectedFlight) {
+      map.flyTo(airportCenter, 8, { duration: 1.2 });
+      return;
+    }
+    if (hasZoomedRef.current) return;
+
+    const match = states.find((s) => matchesSelected(s, selectedFlight));
+    if (match) {
+      map.flyTo([match.latitude, match.longitude], 10, { duration: 1.5 });
+      hasZoomedRef.current = true;
+    } else if (originCoords) {
+      map.flyTo([originCoords.lat, originCoords.lon], 7, { duration: 1.5 });
+      hasZoomedRef.current = true;
+    }
+  }, [selectedFlight, states, originCoords]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
+export default function FlightMap({ states, center, isLoading, icao, selectedFlight, onFlightSelect, onFlightDeselect }) {
+  const arrivals   = (states || []).filter((s) => s.flightType === "arrival");
+  const departures = (states || []).filter((s) => s.flightType === "departure");
+
+  const isTracked = selectedFlight && (states || []).some((s) => matchesSelected(s, selectedFlight));
+
+  // When a selected arrival isn't airborne yet, its plane is sitting at the departure airport
+  const depAirport = selectedFlight?.departure?.airport;
+  const showOrigin =
+    !isTracked &&
+    selectedFlight &&
+    depAirport?.lat != null &&
+    depAirport?.icao?.toUpperCase() !== (icao || "").toUpperCase();
+
+  const originCoords = showOrigin ? { lat: depAirport.lat, lon: depAirport.lon } : null;
 
   return (
     <div className="relative rounded-xl overflow-hidden border border-slate-700" style={{ height: 480 }}>
@@ -47,8 +146,8 @@ export default function FlightMap({ states, center, isLoading }) {
         center={center}
         zoom={8}
         style={{ height: "100%", width: "100%", background: "#0d1117" }}
-        zoomControl={true}
-        attributionControl={true}
+        zoomControl
+        attributionControl
       >
         <TileLayer
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
@@ -57,40 +156,91 @@ export default function FlightMap({ states, center, isLoading }) {
           maxZoom={19}
         />
 
-        {/* Airport marker */}
-        <Marker position={center} icon={AIRPORT_ICON}>
-          <Tooltip permanent direction="top" offset={[0, -10]}>
-            <span className="text-xs font-bold">LOWK</span>
-          </Tooltip>
-        </Marker>
+        <MapFocusController
+          states={states || []}
+          selectedFlight={selectedFlight}
+          airportCenter={center}
+          originCoords={originCoords}
+        />
 
-        {/* Aircraft markers */}
-        {validStates.map((s) => (
-          <Marker
-            key={s.icao24}
-            position={[s.latitude, s.longitude]}
-            icon={planeIcon(s.heading, s.on_ground)}
-          >
+        {/* Watched airport */}
+        <Marker position={center} icon={airportIcon(icao || "LOWK")} />
+
+        {/* Origin airport — shown when selected arrival hasn't taken off yet */}
+        {showOrigin && (
+          <Marker position={[depAirport.lat, depAirport.lon]} icon={originIcon(depAirport.icao)}>
             <Popup>
               <div style={{ minWidth: 160, fontFamily: "monospace", fontSize: 13 }}>
-                <div style={{ fontWeight: "bold", fontSize: 15, marginBottom: 4 }}>
-                  {s.callsign || s.icao24}
+                <div style={{ fontWeight: "bold", fontSize: 14, marginBottom: 4, color: "#fbbf24" }}>
+                  {depAirport.icao} · {depAirport.name}
                 </div>
-                <div>Country: {s.origin_country}</div>
-                <div>Altitude: {s.altitude != null ? `${Math.round(s.altitude)} m` : "—"}</div>
-                <div>Speed: {msToKnots(s.velocity)}</div>
-                <div>Heading: {s.heading != null ? `${Math.round(s.heading)}°` : "—"}</div>
-                <div>Status: {s.on_ground ? "🟡 On ground" : "🟢 Airborne"}</div>
+                <div style={{ marginBottom: 6, color: "#888" }}>
+                  {selectedFlight.number} · not yet departed
+                </div>
+                {selectedFlight.departure?.scheduledTime && (
+                  <div>Scheduled dep: {localTime(selectedFlight.departure.scheduledTime)}</div>
+                )}
+                {selectedFlight.departure?.revisedTime && (
+                  <div>Revised dep: {localTime(selectedFlight.departure.revisedTime)}</div>
+                )}
+                {selectedFlight.aircraft?.model && (
+                  <div>Aircraft: {selectedFlight.aircraft.model}</div>
+                )}
               </div>
             </Popup>
           </Marker>
-        ))}
+        )}
+
+        {/* Live aircraft — scheduled flights only */}
+        {(states || []).map((s) => {
+          const highlighted = matchesSelected(s, selectedFlight);
+          return (
+            <Marker
+              key={s.icao24}
+              position={[s.latitude, s.longitude]}
+              icon={planeIcon(s.heading, s.flightType, highlighted)}
+              zIndexOffset={highlighted ? 1000 : 0}
+              eventHandlers={{ click: () => onFlightSelect(s) }}
+            >
+              <Popup onClose={highlighted ? onFlightDeselect : undefined}>
+                <div style={{ minWidth: 160, fontFamily: "monospace", fontSize: 13 }}>
+                  <div style={{ fontWeight: "bold", fontSize: 15, marginBottom: 4 }}>
+                    {s.callsign || s.icao24}
+                    {highlighted && <span style={{ color: "#22d3ee", marginLeft: 6, fontSize: 11 }}>● tracking</span>}
+                  </div>
+                  <div>Type: {s.flightType === "arrival" ? "➡ Arriving" : "⬅ Departing"}</div>
+                  <div>Country: {s.origin_country}</div>
+                  <div>Altitude: {s.altitude != null ? `${Math.round(s.altitude)} m` : "—"}</div>
+                  <div>Speed: {msToKnots(s.velocity)}</div>
+                  <div>Heading: {s.heading != null ? `${Math.round(s.heading)}°` : "—"}</div>
+                  <div>Status: {s.on_ground ? "🟡 On ground" : "🟢 Airborne"}</div>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
       </MapContainer>
 
+      {/* Legend */}
       <div className="absolute bottom-3 left-3 z-[1000] flex gap-3 text-xs bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-700">
-        <span><span style={{ color: "#22d3ee" }}>●</span> Airborne ({validStates.filter(s => !s.on_ground).length})</span>
-        <span><span style={{ color: "#f59e0b" }}>●</span> Ground ({validStates.filter(s => s.on_ground).length})</span>
+        <span><span style={{ color: "#22d3ee" }}>✈</span> Arrivals ({arrivals.length})</span>
+        <span><span style={{ color: "#a78bfa" }}>✈</span> Departures ({departures.length})</span>
+        {selectedFlight && isTracked && (
+          <span><span style={{ color: "#ffffff" }}>✈</span> {selectedFlight.number} · tracking</span>
+        )}
+        {selectedFlight && showOrigin && (
+          <span><span style={{ color: "#fbbf24" }}>●</span> {selectedFlight.number} · parked at {depAirport.icao}</span>
+        )}
+        {selectedFlight && !isTracked && !showOrigin && (
+          <span style={{ color: "#64748b" }}>{selectedFlight.number} · not yet airborne</span>
+        )}
       </div>
+
+      {!isLoading && (states || []).length === 0 && !selectedFlight && (
+        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 z-[1000] text-center text-slate-500 text-sm pointer-events-none">
+          No scheduled aircraft currently in range
+        </div>
+      )}
     </div>
   );
 }

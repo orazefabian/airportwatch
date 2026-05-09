@@ -23,3 +23,6 @@ npm-debug.log*
 
 # Vite
 client/.vite/
+
+# Server file cache (runtime, not committed)
+server/cache/
