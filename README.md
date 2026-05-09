@@ -95,32 +95,6 @@ npm run dev
 
 Then open http://localhost:5173 in your browser.
 
-## Project Structure
-
-```
-airportwatch/
-├── client/                  # React + Vite frontend
-│   ├── src/
-│   │   ├── api/             # Axios API client functions
-│   │   ├── components/      # Reusable UI components
-│   │   ├── hooks/           # Custom React hooks
-│   │   ├── pages/           # Route-level page components
-│   │   ├── App.jsx          # Router + Query provider setup
-│   │   └── main.jsx         # React entry point
-│   ├── tailwind.config.js
-│   └── vite.config.js
-├── server/
-│   └── src/
-│       ├── routes/
-│       │   └── flights.js   # /api/airports, /api/flights/:icao, /api/live/:icao
-│       ├── airports.js      # Hardcoded airport list
-│       ├── auth.js          # OAuth2 token management + caching
-│       ├── cache.js         # In-memory 60s response cache
-│       └── index.js         # Express app entry point
-├── .env.example
-└── README.md
-```
-
 ## API Endpoints
 
 | Method | Path                  | Description                                |
