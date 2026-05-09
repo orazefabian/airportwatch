@@ -30,3 +30,10 @@
   animation: radar-spin 3s linear infinite;
   transform-origin: center;
 }
+
+@keyframes route-flow {
+  to { stroke-dashoffset: -18; }
+}
+.route-flow-line {
+  animation: route-flow 0.8s linear infinite;
+}
