@@ -175,6 +175,26 @@ export default function FlightMap({ states, center, isLoading, icao, selectedFli
         </div>
       )}
 
+      {/* Prominent banner when selected flight can't be tracked */}
+      {selectedFlight && !isTracked && (
+        <div className="absolute top-3 inset-x-3 z-[1000] flex justify-center pointer-events-none">
+          <div className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl border text-sm font-medium shadow-lg backdrop-blur-sm ${
+            hasDeparted
+              ? "bg-slate-950/90 border-green-700 text-green-300"
+              : "bg-slate-950/90 border-amber-700 text-amber-300"
+          }`}>
+            <span className="text-base">{hasDeparted ? "✈" : "🅿"}</span>
+            <span className="font-mono font-bold">{selectedFlight.number}</span>
+            <span className="opacity-40">·</span>
+            <span className={hasDeparted ? "text-slate-300" : ""}>
+              {hasDeparted
+                ? "In the air — live position unavailable"
+                : `Parked at ${depAirport?.icao || "origin airport"} — not yet departed`}
+            </span>
+          </div>
+        </div>
+      )}
+
       <MapContainer
         center={center}
         zoom={8}
@@ -295,17 +315,6 @@ export default function FlightMap({ states, center, isLoading, icao, selectedFli
         <span><span style={{ color: "#a78bfa" }}>✈</span> Departures ({departures.length})</span>
         {selectedFlight && isTracked && (
           <span><span style={{ color: "#ffffff" }}>✈</span> {selectedFlight.number} · tracking</span>
-        )}
-        {selectedFlight && showOrigin && hasDeparted && (
-          <span style={{ color: "#64748b" }}>
-            <span style={{ color: "#fbbf24" }}>●</span> {selectedFlight.number} · in the air · position unavailable
-          </span>
-        )}
-        {selectedFlight && showOrigin && !hasDeparted && (
-          <span><span style={{ color: "#fbbf24" }}>●</span> {selectedFlight.number} · parked at {depAirport.icao}</span>
-        )}
-        {selectedFlight && !isTracked && !showOrigin && (
-          <span style={{ color: "#64748b" }}>{selectedFlight.number} · not yet airborne</span>
         )}
       </div>
 

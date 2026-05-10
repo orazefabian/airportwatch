@@ -68,6 +68,12 @@ function delayMinutes(scheduledObj, revisedObj) {
   return Math.round((parse(revisedObj.utc) - parse(scheduledObj.utc)) / 60000);
 }
 
+function hasDepartedFromOrigin(flight) {
+  const raw = flight.departure?.revisedTime?.utc || flight.departure?.scheduledTime?.utc;
+  if (!raw) return false;
+  return new Date(raw.replace(" ", "T").replace(/Z$/, "+00:00")) < new Date();
+}
+
 function DelayBadge({ scheduled, revised }) {
   const mins = delayMinutes(scheduled, revised);
   if (mins === null || Math.abs(mins) < 2) return null;
@@ -114,6 +120,8 @@ function FlightCard({ flight, isArrival, selected, onSelect }) {
   const extra = isArrival
     ? (arr?.baggageBelt ? `Belt ${arr.baggageBelt}` : null)
     : (dep?.gate        ? `Gate ${dep.gate}`        : null);
+  const depTime = isArrival ? (localTime(dep?.revisedTime) || localTime(dep?.scheduledTime)) : null;
+  const inAir   = isArrival && hasDepartedFromOrigin(flight);
 
   return (
     <div
@@ -156,9 +164,14 @@ function FlightCard({ flight, isArrival, selected, onSelect }) {
           {displayDate && <div className="text-xs text-slate-500">{displayDate}</div>}
         </div>
       </div>
-      {extra && (
-        <div className="mt-1.5 text-xs">
-          <span className="font-mono font-bold text-violet-400">{extra}</span>
+      {(extra || depTime) && (
+        <div className="mt-1.5 text-xs flex items-center gap-2">
+          {extra && <span className="font-mono font-bold text-violet-400">{extra}</span>}
+          {depTime && (
+            <span className={`font-mono ${inAir ? "text-green-400" : "text-slate-500"}`}>
+              {inAir ? "✈ " : ""}Dep. {depTime}
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -173,6 +186,8 @@ function ArrivalRow({ flight, selected, onSelect }) {
   const displayTime = localTime(revised) || localTime(scheduled);
   const displayDate = dateLabel(revised) || dateLabel(scheduled);
   const statusStyle = STATUS_STYLES[flight.status] || STATUS_STYLES.Unknown;
+  const depTime = localTime(dep?.revisedTime) || localTime(dep?.scheduledTime);
+  const inAir   = hasDepartedFromOrigin(flight);
 
   return (
     <tr
@@ -200,6 +215,11 @@ function ArrivalRow({ flight, selected, onSelect }) {
         </span>
         {dep?.airport?.municipalityName && (
           <div className="text-xs text-slate-500 mt-0.5">{dep.airport.municipalityName}</div>
+        )}
+        {depTime && (
+          <div className={`text-xs mt-0.5 font-mono ${inAir ? "text-green-400" : "text-slate-500"}`}>
+            {inAir ? "✈ " : ""}Dep. {depTime}
+          </div>
         )}
       </td>
       <td className="px-4 py-3.5">
