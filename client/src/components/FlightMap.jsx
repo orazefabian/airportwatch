@@ -168,30 +168,29 @@ export default function FlightMap({ states, center, isLoading, icao, selectedFli
     : (arrApt?.lat != null ? [arrApt.lat, arrApt.lon] : null);
 
   return (
+    <div>
+      {/* Banner sits above the map — kept outside overflow:hidden to avoid z-index conflicts with Leaflet */}
+      {selectedFlight && !isTracked && (
+        <div className={`flex items-center gap-2.5 px-4 py-2.5 mb-2 rounded-xl border text-sm font-medium ${
+          hasDeparted
+            ? "bg-slate-950 border-green-700 text-green-300"
+            : "bg-slate-950 border-amber-700 text-amber-300"
+        }`}>
+          <span className="text-base">{hasDeparted ? "✈" : "🅿"}</span>
+          <span className="font-mono font-bold">{selectedFlight.number}</span>
+          <span className="opacity-40">·</span>
+          <span className={hasDeparted ? "text-slate-300" : ""}>
+            {hasDeparted
+              ? "In the air — live position unavailable"
+              : `Parked at ${depAirport?.icao || "origin airport"} — not yet departed`}
+          </span>
+        </div>
+      )}
+
     <div className="relative rounded-xl overflow-hidden border border-slate-700 h-64 sm:h-[480px]">
       {isLoading && (
         <div className="absolute inset-0 z-[1000] flex items-center justify-center bg-slate-900/70">
           <span className="text-cyan-400 text-sm animate-pulse">Loading live traffic…</span>
-        </div>
-      )}
-
-      {/* Prominent banner when selected flight can't be tracked */}
-      {selectedFlight && !isTracked && (
-        <div className="absolute top-3 inset-x-3 z-[1000] flex justify-center pointer-events-none">
-          <div className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl border text-sm font-medium shadow-lg backdrop-blur-sm ${
-            hasDeparted
-              ? "bg-slate-950/90 border-green-700 text-green-300"
-              : "bg-slate-950/90 border-amber-700 text-amber-300"
-          }`}>
-            <span className="text-base">{hasDeparted ? "✈" : "🅿"}</span>
-            <span className="font-mono font-bold">{selectedFlight.number}</span>
-            <span className="opacity-40">·</span>
-            <span className={hasDeparted ? "text-slate-300" : ""}>
-              {hasDeparted
-                ? "In the air — live position unavailable"
-                : `Parked at ${depAirport?.icao || "origin airport"} — not yet departed`}
-            </span>
-          </div>
         </div>
       )}
 
@@ -323,6 +322,7 @@ export default function FlightMap({ states, center, isLoading, icao, selectedFli
           No scheduled aircraft currently in range
         </div>
       )}
+    </div>
     </div>
   );
 }
