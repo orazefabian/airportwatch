@@ -124,8 +124,20 @@ export default function FlightMap({ states, center, isLoading, icao, selectedFli
 
   const isTracked = selectedFlight && (states || []).some((s) => matchesSelected(s, selectedFlight));
 
-  // When a selected arrival isn't airborne yet, its plane is sitting at the departure airport
   const depAirport = selectedFlight?.departure?.airport;
+
+  // Whether the scheduled (or revised) departure has already passed
+  const depUtc =
+    selectedFlight?.departure?.revisedTime?.utc ||
+    selectedFlight?.departure?.scheduledTime?.utc;
+  const hasDeparted = depUtc
+    ? new Date(depUtc.replace(" ", "T").replace(/Z$/, "+00:00")) < new Date()
+    : false;
+
+  // Show the departure airport marker whenever the flight isn't tracked — regardless of
+  // whether it has departed yet. If it has departed but we have no live position (modeS
+  // absent from AeroDataBox or aircraft outside OpenSky coverage), the marker still gives
+  // a visual anchor; the label/popup text differentiates the two states.
   const showOrigin =
     !isTracked &&
     selectedFlight &&
@@ -196,7 +208,7 @@ export default function FlightMap({ states, center, isLoading, icao, selectedFli
                   {depAirport.icao} · {depAirport.name}
                 </div>
                 <div style={{ marginBottom: 6, color: "#888" }}>
-                  {selectedFlight.number} · not yet departed
+                  {selectedFlight.number} · {hasDeparted ? "in the air · position unavailable" : "awaiting departure"}
                 </div>
                 {selectedFlight.departure?.scheduledTime && (
                   <div>Scheduled dep: {localTime(selectedFlight.departure.scheduledTime)}</div>
@@ -284,7 +296,12 @@ export default function FlightMap({ states, center, isLoading, icao, selectedFli
         {selectedFlight && isTracked && (
           <span><span style={{ color: "#ffffff" }}>✈</span> {selectedFlight.number} · tracking</span>
         )}
-        {selectedFlight && showOrigin && (
+        {selectedFlight && showOrigin && hasDeparted && (
+          <span style={{ color: "#64748b" }}>
+            <span style={{ color: "#fbbf24" }}>●</span> {selectedFlight.number} · in the air · position unavailable
+          </span>
+        )}
+        {selectedFlight && showOrigin && !hasDeparted && (
           <span><span style={{ color: "#fbbf24" }}>●</span> {selectedFlight.number} · parked at {depAirport.icao}</span>
         )}
         {selectedFlight && !isTracked && !showOrigin && (
