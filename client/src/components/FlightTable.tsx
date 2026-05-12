@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import SkeletonRow from "./SkeletonRow";
-import type { Flight, FlightStatus, TimeObject } from "../types";
+import type { Flight, FlightStatus, LiveAircraftState, TimeObject } from "../types";
 
 const PAGE_SIZE = 10;
 
@@ -127,13 +127,14 @@ function PaginationControls({ page, pageCount, setPage }: PaginationControlsProp
 }
 
 interface FlightCardProps {
-  flight:   Flight;
-  isArrival: boolean;
-  selected:  boolean;
-  onSelect:  (flight: Flight) => void;
+  flight:          Flight;
+  isArrival:       boolean;
+  selected:        boolean;
+  onSelect:        (flight: Flight) => void;
+  effectiveStatus: FlightStatus | "Unknown";
 }
 
-function FlightCard({ flight, isArrival, selected, onSelect }: FlightCardProps) {
+function FlightCard({ flight, isArrival, selected, onSelect, effectiveStatus }: FlightCardProps) {
   const dep = flight.departure;
   const arr = flight.arrival;
   const timeEvent   = isArrival ? arr : dep;
@@ -141,7 +142,7 @@ function FlightCard({ flight, isArrival, selected, onSelect }: FlightCardProps) 
   const revised     = timeEvent?.revisedTime ?? timeEvent?.actualTime;
   const displayTime = localTime(revised) || localTime(scheduled);
   const displayDate = dateLabel(revised)  || dateLabel(scheduled);
-  const statusStyle = STATUS_STYLES[flight.status] || STATUS_STYLES.Unknown;
+  const statusStyle = STATUS_STYLES[effectiveStatus] || STATUS_STYLES.Unknown;
   const counterpart = isArrival ? dep?.airport : arr?.airport;
   const extra = isArrival
     ? (arr?.baggageBelt ? `Belt ${arr.baggageBelt}` : null)
@@ -169,7 +170,7 @@ function FlightCard({ flight, isArrival, selected, onSelect }: FlightCardProps) 
           )}
         </div>
         <span className={`px-2 py-0.5 rounded-full text-xs border font-medium flex-shrink-0 ${statusStyle}`}>
-          {flight.status || "Unknown"}
+          {effectiveStatus}
         </span>
       </div>
       <div className="mt-2 flex items-end justify-between gap-2">
@@ -205,19 +206,20 @@ function FlightCard({ flight, isArrival, selected, onSelect }: FlightCardProps) 
 }
 
 interface RowProps {
-  flight:   Flight;
-  selected:  boolean;
-  onSelect:  (flight: Flight) => void;
+  flight:          Flight;
+  selected:        boolean;
+  onSelect:        (flight: Flight) => void;
+  effectiveStatus: FlightStatus | "Unknown";
 }
 
-function ArrivalRow({ flight, selected, onSelect }: RowProps) {
+function ArrivalRow({ flight, selected, onSelect, effectiveStatus }: RowProps) {
   const dep = flight.departure;
   const arr = flight.arrival;
   const scheduled   = arr?.scheduledTime;
   const revised     = arr?.revisedTime ?? arr?.actualTime;
   const displayTime = localTime(revised) || localTime(scheduled);
   const displayDate = dateLabel(revised) || dateLabel(scheduled);
-  const statusStyle = STATUS_STYLES[flight.status] || STATUS_STYLES.Unknown;
+  const statusStyle = STATUS_STYLES[effectiveStatus] || STATUS_STYLES.Unknown;
   const depTime = localTime(dep?.revisedTime) || localTime(dep?.scheduledTime);
   const inAir   = hasDepartedFromOrigin(flight);
 
@@ -268,21 +270,21 @@ function ArrivalRow({ flight, selected, onSelect }: RowProps) {
       </td>
       <td className="px-4 py-3.5">
         <span className={`px-2.5 py-0.5 rounded-full text-xs border font-medium ${statusStyle}`}>
-          {flight.status || "Unknown"}
+          {effectiveStatus}
         </span>
       </td>
     </tr>
   );
 }
 
-function DepartureRow({ flight, selected, onSelect }: RowProps) {
+function DepartureRow({ flight, selected, onSelect, effectiveStatus }: RowProps) {
   const dep = flight.departure;
   const arr = flight.arrival;
   const scheduled   = dep?.scheduledTime;
   const revised     = dep?.revisedTime ?? dep?.actualTime;
   const displayTime = localTime(revised) || localTime(scheduled);
   const displayDate = dateLabel(revised) || dateLabel(scheduled);
-  const statusStyle = STATUS_STYLES[flight.status] || STATUS_STYLES.Unknown;
+  const statusStyle = STATUS_STYLES[effectiveStatus] || STATUS_STYLES.Unknown;
 
   return (
     <tr
@@ -326,7 +328,7 @@ function DepartureRow({ flight, selected, onSelect }: RowProps) {
       </td>
       <td className="px-4 py-3.5">
         <span className={`px-2.5 py-0.5 rounded-full text-xs border font-medium ${statusStyle}`}>
-          {flight.status || "Unknown"}
+          {effectiveStatus}
         </span>
       </td>
     </tr>
@@ -339,9 +341,10 @@ interface FlightTableProps {
   type:           "arrivals" | "departures";
   selectedFlight: Flight | null;
   onFlightSelect: (flight: Flight) => void;
+  liveStates?:    LiveAircraftState[];
 }
 
-export default function FlightTable({ flights, isLoading, type, selectedFlight, onFlightSelect }: FlightTableProps) {
+export default function FlightTable({ flights, isLoading, type, selectedFlight, onFlightSelect, liveStates }: FlightTableProps) {
   const isArrival = type === "arrivals";
   const [statusFilter, setStatusFilter] = useState<FlightStatus | "Unknown" | null>(null);
   const [page, setPage] = useState(0);
@@ -349,18 +352,40 @@ export default function FlightTable({ flights, isLoading, type, selectedFlight, 
   useEffect(() => { setPage(0); }, [type]);
   useEffect(() => { setPage(0); }, [statusFilter]);
 
+  const airborneIcaos = useMemo(() => {
+    if (!liveStates) return new Set<string>();
+    return new Set(liveStates.filter((s) => !s.on_ground).map((s) => s.icao24.toLowerCase()));
+  }, [liveStates]);
+
+  function getEffectiveStatus(flight: Flight): FlightStatus | "Unknown" {
+    const modeS = flight.aircraft?.modeS?.toLowerCase();
+    if (modeS && airborneIcaos.has(modeS) && flight.status === "Arrived") {
+      // Guard: if the arrival time was >60 min ago the aircraft is on a different leg.
+      // Only override when the arrival is recent enough to be THIS flight.
+      const arrUtc = flight.arrival?.actualTime?.utc
+        || flight.arrival?.revisedTime?.utc
+        || flight.arrival?.scheduledTime?.utc;
+      if (arrUtc) {
+        const arrMs = new Date(arrUtc.replace(" ", "T").replace(" ", "")).getTime();
+        if (Date.now() - arrMs > 60 * 60 * 1000) return flight.status || "Unknown";
+      }
+      return "EnRoute";
+    }
+    return flight.status || "Unknown";
+  }
+
   const presentStatuses = useMemo(() => {
     const counts: Partial<Record<FlightStatus | "Unknown", number>> = {};
     (flights || []).forEach((f) => {
-      const s = (f.status || "Unknown") as FlightStatus | "Unknown";
+      const s = getEffectiveStatus(f);
       counts[s] = (counts[s] || 0) + 1;
     });
     return STATUS_ORDER.filter((s) => counts[s]).map((s) => ({ status: s, count: counts[s]! }));
-  }, [flights]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [flights, airborneIcaos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(
-    () => statusFilter ? (flights || []).filter((f) => (f.status || "Unknown") === statusFilter) : (flights || []),
-    [flights, statusFilter]
+    () => statusFilter ? (flights || []).filter((f) => getEffectiveStatus(f) === statusFilter) : (flights || []),
+    [flights, statusFilter, airborneIcaos]  // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const pageCount = Math.ceil(filtered.length / PAGE_SIZE) || 1;
@@ -425,6 +450,7 @@ export default function FlightTable({ flights, isLoading, type, selectedFlight, 
               isArrival={isArrival}
               selected={isSelected(flight, selectedFlight)}
               onSelect={onFlightSelect}
+              effectiveStatus={getEffectiveStatus(flight)}
             />
           ))
         )}
@@ -466,6 +492,7 @@ export default function FlightTable({ flights, isLoading, type, selectedFlight, 
                     flight={flight}
                     selected={isSelected(flight, selectedFlight)}
                     onSelect={onFlightSelect}
+                    effectiveStatus={getEffectiveStatus(flight)}
                   />
                 ) : (
                   <DepartureRow
@@ -473,6 +500,7 @@ export default function FlightTable({ flights, isLoading, type, selectedFlight, 
                     flight={flight}
                     selected={isSelected(flight, selectedFlight)}
                     onSelect={onFlightSelect}
+                    effectiveStatus={getEffectiveStatus(flight)}
                   />
                 )
               )

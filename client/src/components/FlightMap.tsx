@@ -178,23 +178,6 @@ export default function FlightMap({ states, center, isLoading, icao, selectedFli
 
   return (
     <div>
-      {selectedFlight && !isTracked && (
-        <div className={`flex items-center gap-2.5 px-4 py-2.5 mb-2 rounded-xl border text-sm font-medium ${
-          hasDeparted
-            ? "bg-slate-950 border-green-700 text-green-300"
-            : "bg-slate-950 border-amber-700 text-amber-300"
-        }`}>
-          <span className="text-base">{hasDeparted ? "✈" : "🅿"}</span>
-          <span className="font-mono font-bold">{selectedFlight.number}</span>
-          <span className="opacity-40">·</span>
-          <span className={hasDeparted ? "text-slate-300" : ""}>
-            {hasDeparted
-              ? "In the air — live position unavailable"
-              : `Parked at ${depAirport?.icao || "origin airport"} — not yet departed`}
-          </span>
-        </div>
-      )}
-
     <div className="relative rounded-xl overflow-hidden border border-slate-700 h-64 sm:h-[480px]">
       {isLoading && (
         <div className="absolute inset-0 z-[1000] flex items-center justify-center bg-slate-900/70">

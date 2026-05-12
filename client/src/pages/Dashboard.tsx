@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import Navbar from "../components/Navbar";
 import FlightTable from "../components/FlightTable";
+import FlightStatusBanner from "../components/FlightStatusBanner";
 import { fetchAirports, fetchSchedule, fetchTrack } from "../api/airports";
 import type { Airport, Flight, LiveAircraftState } from "../types";
 
@@ -105,6 +106,16 @@ export default function Dashboard() {
     }
   }
 
+  const isTracked = useMemo(() => {
+    if (!selectedFlight) return false;
+    return relevantStates.some((s) => {
+      if (selectedFlight.aircraft?.modeS) {
+        return selectedFlight.aircraft.modeS.toLowerCase() === (s.icao24 || "").toLowerCase();
+      }
+      return selectedFlight.callSign?.trim().toLowerCase() === (s.callsign || "").trim().toLowerCase();
+    });
+  }, [selectedFlight, relevantStates]);
+
   const mapLoading = trackLoading && icao24Codes.length > 0;
   const mapError   = trackError;
 
@@ -195,6 +206,7 @@ export default function Dashboard() {
               type={activeTab}
               selectedFlight={selectedFlight}
               onFlightSelect={handleFlightSelect}
+              liveStates={relevantStates}
             />
           )}
         </section>
@@ -211,6 +223,10 @@ export default function Dashboard() {
               <button onClick={() => refetchTrack()} className="ml-auto text-xs text-red-400 hover:text-red-300">Retry</button>
             )}
           </h2>
+
+          {selectedFlight && (
+            <FlightStatusBanner flight={selectedFlight} isTracked={isTracked} />
+          )}
 
           <Suspense fallback={<MapPlaceholder />}>
             <FlightMap
