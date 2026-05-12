@@ -3,7 +3,7 @@
   "buildCommand": "cd client && npm run build",
   "outputDirectory": "client/dist",
   "functions": {
-    "api/schedule/[icao].js": { "maxDuration": 30 }
+    "api/schedule/[icao].ts": { "maxDuration": 30 }
   },
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
