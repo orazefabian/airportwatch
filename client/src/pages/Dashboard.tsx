@@ -38,7 +38,6 @@ export default function Dashboard() {
     queryFn: () => fetchSchedule(icao, windowHours),
     staleTime: 15 * 60 * 1000,
     refetchInterval: 15 * 60 * 1000,
-    retry: 1,
   });
 
   const arrivals:   Flight[] = flightData?.arrivals   || [];
@@ -197,17 +196,20 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {flightsError ? (
+          {flightsError && !flightData ? (
             <ErrorCard message={(flightsError as Error).message} onRetry={refetchFlights} />
           ) : (
-            <FlightTable
-              flights={activeTab === "arrivals" ? arrivals : departures}
-              isLoading={flightsLoading}
-              type={activeTab}
-              selectedFlight={selectedFlight}
-              onFlightSelect={handleFlightSelect}
-              liveStates={relevantStates}
-            />
+            <>
+              {flightsError && <StaleDataBanner onRetry={refetchFlights} />}
+              <FlightTable
+                flights={activeTab === "arrivals" ? arrivals : departures}
+                isLoading={flightsLoading}
+                type={activeTab}
+                selectedFlight={selectedFlight}
+                onFlightSelect={handleFlightSelect}
+                liveStates={relevantStates}
+              />
+            </>
           )}
         </section>
 
@@ -272,6 +274,15 @@ function MapPlaceholder() {
   return (
     <div className="rounded-xl border border-slate-700 bg-slate-900 flex items-center justify-center" style={{ height: 480 }}>
       <span className="text-slate-500 text-sm animate-pulse">Loading map…</span>
+    </div>
+  );
+}
+
+function StaleDataBanner({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="mb-2 flex items-center justify-between rounded-lg border border-amber-800/50 bg-amber-950/20 px-4 py-2 text-xs text-amber-400">
+      <span>Could not refresh — showing last known data</span>
+      <button onClick={onRetry} className="ml-3 underline hover:text-amber-300">Retry</button>
     </div>
   );
 }
