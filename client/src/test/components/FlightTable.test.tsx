@@ -223,4 +223,28 @@ describe("FlightTable — departures", () => {
     // The "Dep. …" indicator is only for arrival rows
     expect(screen.queryByText(/Dep\./)).not.toBeInTheDocument();
   });
+
+  it("shows arrival time (Arr. …) in the TO column for departed flights", () => {
+    const departedFlight = {
+      ...departures[0],
+      status: "Departed" as const,
+      arrival: {
+        ...departures[0].arrival,
+        actualTime: { utc: "2020-01-15 11:00:00 +0000", local: "2020-01-15 12:00:00 +0100" },
+      },
+    };
+    renderWithProviders(
+      <FlightTable
+        flights={[departedFlight]}
+        isLoading={false}
+        type="departures"
+        selectedFlight={null}
+        onFlightSelect={noop}
+      />
+    );
+    // actualTime → 12:00 local → "12:00 PM"
+    const arrElements = screen.getAllByText(/^Arr\./);
+    expect(arrElements.length).toBeGreaterThan(0);
+    expect(arrElements[0].textContent).toContain("12:00 PM");
+  });
 });

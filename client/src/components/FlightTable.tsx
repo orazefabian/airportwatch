@@ -148,6 +148,7 @@ function FlightCard({ flight, isArrival, selected, onSelect, effectiveStatus }: 
     ? (arr?.baggageBelt ? `Belt ${arr.baggageBelt}` : null)
     : (dep?.gate        ? `Gate ${dep.gate}`        : null);
   const depTime = isArrival ? (localTime(dep?.revisedTime) || localTime(dep?.scheduledTime)) : null;
+  const arrTime = !isArrival ? (localTime(arr?.revisedTime ?? arr?.actualTime) || localTime(arr?.scheduledTime)) : null;
   const inAir   = isArrival && hasDepartedFromOrigin(flight);
 
   return (
@@ -191,13 +192,16 @@ function FlightCard({ flight, isArrival, selected, onSelect, effectiveStatus }: 
           {displayDate && <div className="text-xs text-slate-500">{displayDate}</div>}
         </div>
       </div>
-      {(extra || depTime) && (
+      {(extra || depTime || arrTime) && (
         <div className="mt-1.5 text-xs flex items-center gap-2">
           {extra && <span className="font-mono font-bold text-violet-400">{extra}</span>}
           {depTime && (
             <span className={`font-mono ${inAir ? "text-green-400" : "text-slate-500"}`}>
               {inAir ? "✈ " : ""}Dep. {depTime}
             </span>
+          )}
+          {arrTime && (
+            <span className="font-mono text-slate-500">Arr. {arrTime}</span>
           )}
         </div>
       )}
@@ -285,6 +289,7 @@ function DepartureRow({ flight, selected, onSelect, effectiveStatus }: RowProps)
   const displayTime = localTime(revised) || localTime(scheduled);
   const displayDate = dateLabel(revised) || dateLabel(scheduled);
   const statusStyle = STATUS_STYLES[effectiveStatus] || STATUS_STYLES.Unknown;
+  const arrTime = localTime(arr?.revisedTime ?? arr?.actualTime) || localTime(arr?.scheduledTime);
 
   return (
     <tr
@@ -312,6 +317,11 @@ function DepartureRow({ flight, selected, onSelect, effectiveStatus }: RowProps)
         </span>
         {arr?.airport?.municipalityName && (
           <div className="text-xs text-slate-500 mt-0.5">{arr.airport.municipalityName}</div>
+        )}
+        {arrTime && (
+          <div className="text-xs mt-0.5 font-mono text-slate-500">
+            Arr. {arrTime}
+          </div>
         )}
       </td>
       <td className="px-4 py-3.5">
