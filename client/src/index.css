@@ -37,3 +37,10 @@
 .route-flow-line {
   animation: route-flow 0.8s linear infinite;
 }
+
+@keyframes route-estimated-flow {
+  to { stroke-dashoffset: -22; }
+}
+.route-estimated-line {
+  animation: route-estimated-flow 1.6s linear infinite;
+}

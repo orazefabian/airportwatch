@@ -67,6 +67,25 @@ function airportIcon(icao: string): L.DivIcon {
   });
 }
 
+function destIcon(icao: string): L.DivIcon {
+  return L.divIcon({
+    className: "",
+    html: `
+      <style>
+        @keyframes dest-pulse{0%,100%{transform:scale(1);opacity:.5}50%{transform:scale(1.65);opacity:0}}
+        .dest-ring{animation:dest-pulse 2.5s ease-out infinite}
+      </style>
+      <div style="position:relative;width:40px;height:40px;">
+        <div class="dest-ring" style="position:absolute;inset:0;border-radius:50%;border:1.5px solid #a78bfa;transform-origin:center;"></div>
+        <div style="position:absolute;inset:6px;border-radius:50%;border:1px solid #a78bfa55;"></div>
+        <div style="position:absolute;inset:13px;border-radius:50%;background:#a78bfa;box-shadow:0 0 6px #a78bfa,0 0 16px #a78bfa66;"></div>
+        <div style="position:absolute;top:44px;left:50%;transform:translateX(-50%);background:#020617;color:#a78bfa;font-size:10px;font-weight:700;letter-spacing:1.5px;padding:2px 7px;border-radius:4px;border:1px solid #a78bfa;white-space:nowrap;font-family:monospace;box-shadow:0 0 8px #a78bfa33;">${icao}</div>
+      </div>`,
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+  });
+}
+
 function originIcon(icao: string): L.DivIcon {
   return L.divIcon({
     className: "",
@@ -86,6 +105,12 @@ function originIcon(icao: string): L.DivIcon {
   });
 }
 
+function parseAdbUtc(raw: string | null | undefined): Date | null {
+  if (!raw) return null;
+  const d = new Date(raw.replace(" ", "T").replace(" ", ""));
+  return isNaN(d.getTime()) ? null : d;
+}
+
 function msToKnots(ms: number | null): string {
   if (ms == null) return "—";
   return `${Math.round(ms * 1.94384)} kts`;
@@ -96,9 +121,10 @@ interface MapFocusControllerProps {
   selectedFlight: Flight | null;
   airportCenter:  [number, number];
   originCoords:   { lat: number; lon: number } | null;
+  destCoords:     { lat: number; lon: number } | null;
 }
 
-function MapFocusController({ states, selectedFlight, airportCenter, originCoords }: MapFocusControllerProps) {
+function MapFocusController({ states, selectedFlight, airportCenter, originCoords, destCoords }: MapFocusControllerProps) {
   const map = useMap();
   const hasZoomedRef = useRef<boolean>(false);
 
@@ -120,8 +146,11 @@ function MapFocusController({ states, selectedFlight, airportCenter, originCoord
     } else if (originCoords) {
       map.flyTo([originCoords.lat, originCoords.lon], 7, { duration: 1.5 });
       hasZoomedRef.current = true;
+    } else if (destCoords) {
+      map.flyTo([destCoords.lat, destCoords.lon], 7, { duration: 1.5 });
+      hasZoomedRef.current = true;
     }
-  }, [selectedFlight, states, originCoords]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedFlight, states, originCoords, destCoords]); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
 }
 
@@ -146,9 +175,45 @@ export default function FlightMap({ states, center, isLoading, icao, selectedFli
   const depUtc =
     selectedFlight?.departure?.revisedTime?.utc ||
     selectedFlight?.departure?.scheduledTime?.utc;
-  const hasDeparted = depUtc
-    ? new Date(depUtc.replace(" ", "T").replace(/Z$/, "+00:00")) < new Date()
-    : false;
+  const now          = new Date();
+  const hasDeparted  = (parseAdbUtc(depUtc) ?? new Date(0)) < now;
+
+  const arrActualUtc = selectedFlight?.arrival?.actualTime?.utc;
+  const hasArrived = arrActualUtc
+    ? (parseAdbUtc(arrActualUtc) ?? new Date(8640000000000000)) < now
+    : selectedFlight?.status === "Arrived";
+
+  const arrAirport = selectedFlight?.arrival?.airport;
+  // AeroDataBox omits the ICAO of the queried airport on whichever side it appears.
+  // For arrivals: depAirport.icao is present (origin is not our airport).
+  // For departures: depAirport.icao is absent (AeroDataBox omits it as the queried airport).
+  // So: presence of a non-matching depAirport.icao means it's an arrival flight.
+  const isUntrackedArrival =
+    depAirport?.icao != null && depAirport.icao.toUpperCase() !== (icao || "").toUpperCase();
+
+  const estimatedDepPos: [number, number] | null = isUntrackedArrival
+    ? (depAirport?.lat != null && depAirport?.lon != null ? [depAirport.lat, depAirport.lon] : null)
+    : center;
+  const estimatedArrPos: [number, number] | null = isUntrackedArrival
+    ? center
+    : (arrAirport?.lat != null && arrAirport?.lon != null ? [arrAirport.lat, arrAirport.lon] : null);
+  const estimatedRouteColor = isUntrackedArrival ? "#22d3ee" : "#a78bfa";
+
+const showEstimatedRoute =
+    !isTracked &&
+    !!selectedFlight &&
+    hasDeparted &&
+    !hasArrived &&
+    estimatedDepPos !== null &&
+    estimatedArrPos !== null;
+
+  const showDest =
+    showEstimatedRoute &&
+    !isUntrackedArrival &&
+    arrAirport?.lat != null &&
+    arrAirport?.icao?.toUpperCase() !== (icao || "").toUpperCase();
+
+  const destCoords = showDest ? { lat: arrAirport!.lat!, lon: arrAirport!.lon! } : null;
 
   const showOrigin =
     !isTracked &&
@@ -204,6 +269,7 @@ export default function FlightMap({ states, center, isLoading, icao, selectedFli
           selectedFlight={selectedFlight}
           airportCenter={center}
           originCoords={originCoords}
+          destCoords={destCoords}
         />
 
         <Marker position={center} icon={airportIcon(icao || "LOWK")} />
@@ -230,6 +296,47 @@ export default function FlightMap({ states, center, isLoading, icao, selectedFli
               </div>
             </Popup>
           </Marker>
+        )}
+
+        {showDest && arrAirport?.lat != null && arrAirport?.lon != null && (
+          <Marker position={[arrAirport.lat, arrAirport.lon]} icon={destIcon(arrAirport.icao)}>
+            <Popup>
+              <div style={{ minWidth: 160, fontFamily: "monospace", fontSize: 13 }}>
+                <div style={{ fontWeight: "bold", fontSize: 14, marginBottom: 4, color: "#a78bfa" }}>
+                  {arrAirport.icao} · {arrAirport.name}
+                </div>
+                <div style={{ marginBottom: 6, color: "#888" }}>
+                  {selectedFlight!.number} · in the air · position unavailable
+                </div>
+                {selectedFlight!.arrival?.scheduledTime && (
+                  <div>Scheduled arr: {localTime(selectedFlight!.arrival.scheduledTime)}</div>
+                )}
+                {selectedFlight!.arrival?.revisedTime && (
+                  <div>Revised arr: {localTime(selectedFlight!.arrival.revisedTime)}</div>
+                )}
+                {selectedFlight!.aircraft?.model && (
+                  <div>Aircraft: {selectedFlight!.aircraft.model}</div>
+                )}
+              </div>
+            </Popup>
+          </Marker>
+        )}
+
+        {showEstimatedRoute && estimatedDepPos && estimatedArrPos && (
+          <>
+            <Polyline
+              positions={[estimatedDepPos, estimatedArrPos]}
+              pathOptions={{ color: estimatedRouteColor, weight: 1.5, opacity: 0.12 }}
+            />
+            <Polyline
+              positions={[estimatedDepPos, estimatedArrPos]}
+              pathOptions={{
+                color: estimatedRouteColor, weight: 3, opacity: 0.65,
+                dashArray: "6 16", lineCap: "round",
+                className: "route-estimated-line",
+              }}
+            />
+          </>
         )}
 
         {planePos && (
@@ -297,6 +404,9 @@ export default function FlightMap({ states, center, isLoading, icao, selectedFli
         <span><span style={{ color: "#a78bfa" }}>✈</span> Departures ({departures.length})</span>
         {selectedFlight && isTracked && (
           <span><span style={{ color: "#ffffff" }}>✈</span> {selectedFlight.number} · tracking</span>
+        )}
+        {showEstimatedRoute && (
+          <span><span style={{ color: estimatedRouteColor }}>- -</span> {selectedFlight!.number} · estimated route</span>
         )}
       </div>
 
