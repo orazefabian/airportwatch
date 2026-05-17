@@ -44,7 +44,7 @@ airportwatch/
 | Dev runner | concurrently | ^8.2.2 (root) |
 | Deployment | Vercel | serverless |
 
-**No TypeScript.** The project is plain JavaScript with JSX.
+The client and server are **TypeScript** with `strict: true`. All new code must use `.ts` / `.tsx` — see the TypeScript Strict Mode rule in CLAUDE.md.
 
 ---
 
@@ -97,9 +97,9 @@ The Express server exposes all routes; only a subset are also deployed as Vercel
 
 ### Vercel serverless files
 ```
-api/airports.js            → GET /api/airports
-api/track.js               → GET /api/track
-api/schedule/[icao].js     → GET /api/schedule/:icao   (30 s max duration)
+api/airports.ts            → GET /api/airports
+api/track.ts               → GET /api/track
+api/schedule/[icao].ts     → GET /api/schedule/:icao   (30 s max duration)
 ```
 
 ---
@@ -108,14 +108,14 @@ api/schedule/[icao].js     → GET /api/schedule/:icao   (30 s max duration)
 
 | File | Responsibility |
 |------|---------------|
-| `index.js` | Express app, CORS (`http://localhost:5173`), mounts router, global error handler |
-| `routes/flights.js` | All route handlers. Orchestrates OpenSky fan-out and AeroDataBox schedule fetching |
-| `aerodatabox.js` | AeroDataBox schedule calls via RapidAPI; timezone-aware date formatting; exports `fetchSchedule` |
-| `auth.js` | OpenSky OAuth2 token lifecycle: fetch, cache, pre-expiry refresh |
-| `cache.js` | In-memory `Map`-based cache with TTL; integrates file cache for schedule keys |
-| `fileCache.js` | Persists schedule cache to `server/cache/*.json`. Disabled when `process.env.VERCEL` is set |
-| `airports.js` | Hardcoded list of 30+ airports: `{ icao, iata, name, city, country, lat, lon, tz }` |
-| `airportCoords.js` | Coordinate lookup for 1,000+ airports (used to enrich departure/arrival airport objects) |
+| `index.ts` | Express app, CORS (`http://localhost:5173`), mounts router, global error handler |
+| `routes/flights.ts` | All route handlers. Orchestrates OpenSky fan-out and AeroDataBox schedule fetching |
+| `aerodatabox.ts` | AeroDataBox schedule calls via RapidAPI; timezone-aware date formatting; exports `fetchSchedule` |
+| `auth.ts` | OpenSky OAuth2 token lifecycle: fetch, cache, pre-expiry refresh |
+| `cache.ts` | In-memory `Map`-based cache with TTL; integrates file cache for schedule keys |
+| `fileCache.ts` | Persists schedule cache to `server/cache/*.json`. Disabled when `process.env.VERCEL` is set |
+| `airports.ts` | Hardcoded list of 30+ airports: `{ icao, iata, name, city, country, lat, lon, tz }` |
+| `airportCoords.ts` | Coordinate lookup for 1,000+ airports (used to enrich departure/arrival airport objects) |
 
 ### Caching layers (server-side)
 
@@ -130,16 +130,16 @@ If AeroDataBox returns `"Expected"` or `"Scheduled"` but the scheduled time is i
 ## Frontend Architecture (`client/src/`)
 
 ### Entry points
-- `main.jsx` — React 19 `createRoot`, wraps app in `StrictMode`
-- `App.jsx` — React Router `<BrowserRouter>`, React Query `<QueryClientProvider>` (global `staleTime: 30s`), route definitions
+- `main.tsx` — React 19 `createRoot`, wraps app in `StrictMode`
+- `App.tsx` — React Router `<BrowserRouter>`, React Query `<QueryClientProvider>` (global `staleTime: 30s`), route definitions
 
 ### Pages
 
 | Page | Route | Purpose |
 |------|-------|---------|
-| `pages/Home.jsx` | `/` | Redirects to last visited airport (localStorage) or default `LOWK` |
-| `pages/Select.jsx` | `/select` | Airport search and selection |
-| `pages/Dashboard.jsx` | `/airport/:icao` | Main view: schedule table + live map |
+| `pages/Home.tsx` | `/` | Redirects to last visited airport (localStorage) or default `LOWK` |
+| `pages/Select.tsx` | `/select` | Airport search and selection |
+| `pages/Dashboard.tsx` | `/airport/:icao` | Main view: schedule table + live map |
 
 #### Dashboard data orchestration
 - React Query `["airports"]` — staleTime: Infinity
@@ -152,22 +152,22 @@ If AeroDataBox returns `"Expected"` or `"Scheduled"` but the scheduled time is i
 
 | Component | File | Role |
 |-----------|------|------|
-| `Navbar` | `components/Navbar.jsx` | Sticky header; shows radar icon, countdown timer, home link |
-| `AirportSelector` | `components/AirportSelector.jsx` | Search dropdown for airports; persists choice to localStorage |
-| `FlightMap` | `components/FlightMap.jsx` | Leaflet map — aircraft icons, route polylines, airport markers, selection zoom. **Lazy loaded** |
-| `FlightTable` | `components/FlightTable.jsx` | Responsive arrivals/departures table with status filter, pagination (10/page) |
-| `LiveTraffic` | `components/LiveTraffic.jsx` | Alternate raw live-states table (currently not rendered in Dashboard) |
-| `SkeletonRow` | `components/SkeletonRow.jsx` | Animated loading placeholder rows |
+| `Navbar` | `components/Navbar.tsx` | Sticky header; shows radar icon, countdown timer, home link |
+| `AirportSelector` | `components/AirportSelector.tsx` | Search dropdown for airports; persists choice to localStorage |
+| `FlightMap` | `components/FlightMap.tsx` | Leaflet map — aircraft icons, route polylines, airport markers, selection zoom. **Lazy loaded** |
+| `FlightTable` | `components/FlightTable.tsx` | Responsive arrivals/departures table with status filter, pagination (10/page) |
+| `LiveTraffic` | `components/LiveTraffic.tsx` | Alternate raw live-states table (currently not rendered in Dashboard) |
+| `SkeletonRow` | `components/SkeletonRow.tsx` | Animated loading placeholder rows |
 
 ### Custom hook
 
-`hooks/useCountdown.js` — decrements from `totalSeconds` to 0 every second, resets automatically. Used by Navbar to show "Refreshing in Xs".
+`hooks/useCountdown.ts` — decrements from `totalSeconds` to 0 every second, resets automatically. Used by Navbar to show "Refreshing in Xs".
 
 ### API client layer
 
-`api/client.js` — Axios instance; `baseURL = import.meta.env.VITE_API_URL || "/api"`; 15 s timeout.
+`api/client.ts` — Axios instance; `baseURL = import.meta.env.VITE_API_URL || "/api"`; 15 s timeout.
 
-`api/airports.js` — exported functions:
+`api/airports.ts` — exported functions:
 - `fetchAirports()`
 - `fetchFlights(icao)`
 - `fetchLiveTraffic(icao)`
@@ -176,6 +176,48 @@ If AeroDataBox returns `"Expected"` or `"Scheduled"` but the scheduled time is i
 
 ### Client-side caching (React Query)
 Mirrors server TTLs: `staleTime: 15 min` for schedule, `staleTime: 60 s` for track. No WebSockets — pure HTTP polling.
+
+---
+
+## Testing
+
+Two test layers exist. Both must pass before any change is shipped.
+
+### Vitest (`client/src/test/`)
+
+Runs in jsdom — no real browser. Tests component rendering and logic in isolation.
+
+- **MSW handlers**: `src/test/mocks/handlers.ts` — intercepts API calls at the fetch level
+- **Render helper**: `src/test/utils/renderWithProviders.tsx` — wraps components in React Query + Router
+- **Shared fixtures**: `src/test/mocks/fixtures/airports.ts`, `src/test/mocks/fixtures/schedule.ts` — imported by both Vitest and Playwright
+- **Covers**: `FlightTable`, `FlightStatusBanner`, `Dashboard` (StaleDataBanner only — direct `QueryClient` manipulation not possible in a real browser)
+- **Excludes**: `FlightMap` — Leaflet requires real browser geometry APIs unavailable in jsdom
+- **Commands**: `npm run test:run` (single pass), `npm test` (watch), `npm run coverage`
+
+### Playwright E2E (`client/e2e/`)
+
+Runs against a real Chromium browser pointed at the Vite dev server.
+
+- **Config**: `client/playwright.config.ts` — starts `npm run dev` with `VITE_API_URL=/api` so same-origin API calls are interceptable by `page.route()`
+- **Network mocking**: `page.route()` intercepts at the browser level; no MSW needed
+- **Auto-fixture**: `e2e/fixtures/test.ts` extends Playwright's base `test` with an `apiMocks` fixture that calls `mockDefaultRoutes()` automatically before every test
+- **Override pattern**: `page.route()` calls inside a test body are LIFO — the last registered handler wins, so per-test overrides take priority over the auto-fixture defaults
+- **Mock builders** (`e2e/fixtures/api-mocks.ts`):
+  - `arrivedFlightSchedule(minsAgo)` — flight with a past arrival; `minsAgo > 30` triggers "Reached destination" banner, `minsAgo ≤ 30` + airborne track triggers "EnRoute" override
+  - `bigSchedule()` — 11 arrivals to trigger pagination (PAGE_SIZE = 10)
+- **Covers**: Dashboard page flows — tab switching, flight selection, window picker, status banners, pagination, error states, live status override
+- **Commands**: `npm run test:e2e`, `npm run test:e2e:ui` (interactive), `npm run test:e2e:debug`
+
+### Locator patterns for Playwright
+
+The responsive layout renders **two DOM copies** of every flight row — a mobile card (`div.sm:hidden`) and a desktop table (`div.hidden.sm:block`). At the default 1280×720 test viewport, the mobile copy is hidden but still in the DOM. Always scope locators to avoid hitting the hidden copy:
+
+```ts
+page.locator("table").getByText("OS 101")              // desktop table cell, not mobile card
+page.getByRole("row", { name: /OS 101/ }).click()      // <tr> elements only exist in the table
+page.getByRole("cell", { name: "EnRoute" })            // status badge
+page.getByText("ICAO").locator("xpath=..").getByText("LOWK")  // ICAO badge (not map marker)
+```
 
 ---
 
@@ -285,7 +327,7 @@ Custom CSS in `client/src/index.css`:
 - **Install**: installs root + `server/` + `client/` dependencies
 - **Build**: `cd client && npm run build`
 - **Output**: `client/dist`
-- **Serverless function timeout**: `api/schedule/[icao].js` → 30 s max duration
+- **Serverless function timeout**: `api/schedule/[icao].ts` → 30 s max duration
 - **SPA fallback**: all non-`/api/` requests rewrite to `/index.html`
 - **File cache**: disabled (`VERCEL` env var detected); in-memory only
 
@@ -306,8 +348,7 @@ Client: `http://localhost:5173` — Server: `http://localhost:3001`
 - **AeroDataBox 12-hour chunk limit**: AeroDataBox accepts a maximum 12-hour window per request. For windows wider than 12 hours the server fans out sequential calls (1.1 s apart) and deduplicates by flight number.
 - **AeroDataBox returns modeS directly**: No registration → ICAO24 resolution is needed; AeroDataBox includes the transponder hex code (`modeS`) in the schedule response. If `modeS` is absent for a flight, that plane won't appear on the map.
 - **Vercel read-only FS**: File cache writes to `server/cache/` are disabled on Vercel; only in-memory cache is available.
-- **Vercel cold starts**: In-process caches (schedule Map in cache.js) are empty on cold start. First schedule request per airport after a cold start hits AeroDataBox directly.
+- **Vercel cold starts**: In-process caches (schedule Map in `cache.ts`) are empty on cold start. First schedule request per airport after a cold start hits AeroDataBox directly.
 - **`/api/flights/:icao` and `/api/live/:icao` are Express-only**: These OpenSky endpoints exist in the server router but have no Vercel serverless counterparts. The frontend does not use them — live positions are obtained via `fetchTrack` (the `/api/track` endpoint) which targets specific scheduled aircraft worldwide.
 - **FlightMap lazy loading**: Wrapped in `React.lazy` + `Suspense` in Dashboard; do not import it directly without a Suspense boundary.
-- **No TypeScript**: All files are `.js` / `.jsx`. Type information lives in JSDoc comments and inferred shapes only.
 - **LiveTraffic component**: exists but is **not currently rendered** in the Dashboard. It's a raw live-states table that was superseded by the map integration.
