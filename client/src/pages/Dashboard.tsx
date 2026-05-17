@@ -161,6 +161,7 @@ export default function Dashboard() {
               {(["arrivals", "departures"] as const).map((tab) => (
                 <button
                   key={tab}
+                  aria-selected={activeTab === tab}
                   onClick={() => { setActiveTab(tab); setSelectedFlight(null); }}
                   className={`px-5 py-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${
                     activeTab === tab
