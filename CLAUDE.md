@@ -38,4 +38,10 @@ AeroDataBox and OpenSky may omit optional fields. Always use optional chaining w
 
 ## Write or Update Tests for Every Substantive Change
 
-Any change to `FlightTable`, `Dashboard`, or server schedule logic must have a corresponding test case added or updated in `client/src/test/`. Run `npm test` in `client/` before marking a task complete. `FlightMap` is explicitly excluded from the test suite (Leaflet requires browser geometry APIs not available in jsdom).
+Two test layers exist — use the right one for each type of change.
+
+**Vitest** (`client/src/test/`) — component-level tests in jsdom. Use for isolated rendering logic: `FlightTable`, `FlightStatusBanner`, pure functions and hooks. Run: `npm run test:run` in `client/`. `FlightMap` is excluded (Leaflet requires real browser geometry APIs unavailable in jsdom).
+
+**Playwright E2E** (`client/e2e/`) — full browser tests against the running Vite dev server. Use for `Dashboard` page flows: tab switching, flight selection, window picker, error states, pagination, and network-level behavior. Run: `npm run test:e2e` in `client/`.
+
+Both suites must pass before marking a task complete. `Dashboard` changes → update E2E tests in `e2e/pages/`. Isolated component changes → update Vitest tests in `src/test/`.
