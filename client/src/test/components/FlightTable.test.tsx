@@ -247,4 +247,51 @@ describe("FlightTable — departures", () => {
     expect(arrElements.length).toBeGreaterThan(0);
     expect(arrElements[0].textContent).toContain("12:00 PM");
   });
+
+  it("shows revised (delayed) time as primary and original scheduled time struck-through when departure is delayed", () => {
+    // OS 202: scheduledTime local 09:00 → "9:00 AM", revisedTime local 09:30 → "9:30 AM", delay = +30m
+    renderWithProviders(
+      <FlightTable
+        flights={departures}
+        isLoading={false}
+        type="departures"
+        selectedFlight={null}
+        onFlightSelect={noop}
+      />
+    );
+    // Revised time is the primary time shown
+    expect(screen.getAllByText("9:30 AM").length).toBeGreaterThan(0);
+    // Original scheduled time is shown separately (struck through)
+    expect(screen.getAllByText("9:00 AM").length).toBeGreaterThan(0);
+    // Delay badge is also present
+    expect(screen.getAllByText("+30m").length).toBeGreaterThan(0);
+    // The scheduled time element has line-through styling
+    const scheduledElements = screen.getAllByText("9:00 AM");
+    expect(scheduledElements.some((el) => el.className.includes("line-through"))).toBe(true);
+  });
+
+  it("does NOT show a duplicate struck-through time when departure is on time", () => {
+    const onTimeFlight = {
+      ...departures[0],
+      status: "Scheduled" as const,
+      departure: {
+        ...departures[0].departure,
+        revisedTime: undefined,
+      },
+    };
+    renderWithProviders(
+      <FlightTable
+        flights={[onTimeFlight]}
+        isLoading={false}
+        type="departures"
+        selectedFlight={null}
+        onFlightSelect={noop}
+      />
+    );
+    // Scheduled time shows normally (no line-through)
+    const timeElements = screen.getAllByText("9:00 AM");
+    expect(timeElements.every((el) => !el.className.includes("line-through"))).toBe(true);
+    // No delay badge
+    expect(screen.queryByText(/\+\d+m/)).not.toBeInTheDocument();
+  });
 });

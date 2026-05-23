@@ -73,7 +73,12 @@ function delayMinutes(
   revisedObj:   TimeObject | null | undefined
 ): number | null {
   if (!scheduledObj?.utc || !revisedObj?.utc) return null;
-  const parse = (s: string) => new Date(s.replace(" ", "T").replace(/([+-]\d{2}:\d{2}|Z)$/, "Z"));
+  // Normalize "YYYY-MM-DD HH:MM:SS +HHMM" or "+HH:MM" or "Z" → valid ISO 8601
+  const parse = (s: string) =>
+    new Date(
+      s.replace(/^(\S+) (\S+) /, "$1T$2")       // collapse "date time tz" → "dateTtime"
+       .replace(/([+-]\d{2})(\d{2})$/, "$1:$2")  // +0000 → +00:00 if colon missing
+    );
   return Math.round((parse(revisedObj.utc).getTime() - parse(scheduledObj.utc).getTime()) / 60000);
 }
 
@@ -189,6 +194,9 @@ function FlightCard({ flight, isArrival, selected, onSelect, effectiveStatus }: 
             {displayTime || "—"}
             <DelayBadge scheduled={scheduled} revised={revised} />
           </div>
+          {!isArrival && revised && Math.abs(delayMinutes(scheduled, revised) ?? 0) >= 2 && (
+            <div className="text-xs text-slate-500 line-through font-mono">{localTime(scheduled)}</div>
+          )}
           {displayDate && <div className="text-xs text-slate-500">{displayDate}</div>}
         </div>
       </div>
@@ -329,6 +337,11 @@ function DepartureRow({ flight, selected, onSelect, effectiveStatus }: RowProps)
           {displayTime || "—"}
           <DelayBadge scheduled={scheduled} revised={revised} />
         </div>
+        {revised && Math.abs(delayMinutes(scheduled, revised) ?? 0) >= 2 && (
+          <div className="text-xs text-slate-500 line-through mt-0.5 font-mono">
+            {localTime(scheduled)}
+          </div>
+        )}
         {displayDate && <div className="text-xs text-slate-500 mt-0.5">{displayDate}</div>}
       </td>
       <td className="px-4 py-3.5">
