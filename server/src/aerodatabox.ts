@@ -18,6 +18,8 @@ function fmtLocal(date: Date, timezone: string): string {
   return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
 }
 
+const MAX_RETRIES = 2;
+
 export async function fetchSchedule(
   icao: string,
   timezone: string = "UTC",
@@ -30,42 +32,54 @@ export async function fetchSchedule(
   const from = fmtLocal(fromDate, timezone);
   const to   = fmtLocal(toDate,   timezone);
 
-  try {
-    const { data } = await axios.get(
-      `${BASE_URL}/flights/airports/icao/${icao}/${from}/${to}`,
-      {
-        params: {
-          withLeg: true,
-          direction: "Both",
-          withCancelled: true,
-          withCodeshared: true,
-          withCargo: false,
-          withPrivate: false,
-        },
-        headers: {
-          "X-RapidAPI-Key": key,
-          "X-RapidAPI-Host": RAPIDAPI_HOST,
-        },
-      }
-    );
+  const requestOptions = {
+    params: {
+      withLeg: true,
+      direction: "Both",
+      withCancelled: true,
+      withCodeshared: true,
+      withCargo: false,
+      withPrivate: false,
+    },
+    headers: {
+      "X-RapidAPI-Key": key,
+      "X-RapidAPI-Host": RAPIDAPI_HOST,
+    },
+  };
 
-    const raw = data as { arrivals?: unknown[]; departures?: unknown[] };
-    return {
-      arrivals:   ((raw.arrivals   || []) as ScheduleResponse["arrivals"]).sort((a, b) => compareScheduled(a.arrival,   b.arrival)),
-      departures: ((raw.departures || []) as ScheduleResponse["departures"]).sort((a, b) => compareScheduled(a.departure, b.departure)),
-    };
-  } catch (err: unknown) {
-    if (
-      typeof err === "object" &&
-      err !== null &&
-      "response" in err &&
-      (err as { response?: { status?: number } }).response?.status === 404
-    ) {
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const { data } = await axios.get(
+        `${BASE_URL}/flights/airports/icao/${icao}/${from}/${to}`,
+        requestOptions
+      );
+
+      const raw = data as { arrivals?: unknown[]; departures?: unknown[] };
+      return {
+        arrivals:   ((raw.arrivals   || []) as ScheduleResponse["arrivals"]).sort((a, b) => compareScheduled(a.arrival,   b.arrival)),
+        departures: ((raw.departures || []) as ScheduleResponse["departures"]).sort((a, b) => compareScheduled(a.departure, b.departure)),
+      };
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } }).response?.status;
       // AeroDataBox returns 404 when no flights exist in the window — not an error
-      return { arrivals: [], departures: [] };
+      if (status === 404) return { arrivals: [], departures: [] };
+      // Retry on 429 with exponential backoff (handles transient per-second rate limits)
+      if (status === 429 && attempt < MAX_RETRIES) {
+        await new Promise<void>((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
+        continue;
+      }
+      if (status === 429) {
+        throw Object.assign(
+          new Error("AeroDataBox rate limit reached — API quota may be exhausted"),
+          { status: 429 }
+        );
+      }
+      throw err;
     }
-    throw err;
   }
+
+  // Unreachable — loop always returns or throws
+  throw new Error("fetchSchedule: unexpected exit from retry loop");
 }
 
 function compareScheduled(

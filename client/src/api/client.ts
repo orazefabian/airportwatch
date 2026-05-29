@@ -5,4 +5,14 @@ const api = axios.create({
   timeout: 20000,
 });
 
+api.interceptors.response.use(
+  (res) => res,
+  (err: unknown) => {
+    if (axios.isAxiosError(err) && typeof err.response?.data?.error === "string") {
+      err.message = err.response.data.error;
+    }
+    return Promise.reject(err);
+  }
+);
+
 export default api;
