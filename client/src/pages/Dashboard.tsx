@@ -1,6 +1,7 @@
 import { useState, useRef, useMemo, Suspense, lazy } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import axios from "axios";
 import Navbar from "../components/Navbar";
 import FlightTable from "../components/FlightTable";
 import FlightStatusBanner from "../components/FlightStatusBanner";
@@ -38,6 +39,10 @@ export default function Dashboard() {
     queryFn: () => fetchSchedule(icao, windowHours),
     staleTime: 15 * 60 * 1000,
     refetchInterval: 15 * 60 * 1000,
+    retry: (failureCount, error) => {
+      if (axios.isAxiosError(error) && error.response?.status === 429) return false;
+      return failureCount < 2;
+    },
   });
 
   const arrivals:   Flight[] = flightData?.arrivals   || [];
